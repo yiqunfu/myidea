@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
-def _load_chat_file(chat_path: Path) -> List[Dict[str, Any]]:
+Message = Dict[str, Any]
+
+
+def _load_chat_file(chat_path: Path) -> List[Message]:
     """Load chat messages from a JSON file.
 
     The file is expected to contain a list of message objects. Invalid files
@@ -29,7 +34,7 @@ def _load_chat_file(chat_path: Path) -> List[Dict[str, Any]]:
         raise ValueError(f"Chat file is not valid JSON: {chat_path}") from exc
 
 
-def read_conversation(chat_path: str, consent: bool) -> List[Dict[str, Any]]:
+def read_conversation(chat_path: str, consent: bool) -> List[Message]:
     """Read a locally exported WeChat conversation after consent is granted.
 
     Args:
@@ -48,6 +53,85 @@ def read_conversation(chat_path: str, consent: bool) -> List[Dict[str, Any]]:
 
     path = Path(chat_path).expanduser().resolve()
     return _load_chat_file(path)
+
+
+def _extract_timestamp(msg: Message) -> Optional[datetime]:
+    ts = msg.get("timestamp") or msg.get("time") or msg.get("ts")
+    if ts is None:
+        return None
+    # Accept int (ms or s) or ISO string
+    try:
+        if isinstance(ts, (int, float)):
+            # Heuristic: if larger than year 3000 in seconds, treat as ms
+            if ts > 32503680000:
+                ts = ts / 1000.0
+            return datetime.fromtimestamp(ts)
+        if isinstance(ts, str):
+            try:
+                return datetime.fromisoformat(ts)
+            except ValueError:
+                # common format: "YYYY-MM-DD HH:MM:SS"
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
+                    try:
+                        return datetime.strptime(ts, fmt)
+                    except ValueError:
+                        continue
+    except Exception:
+        return None
+    return None
+
+
+def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
+    """Very simple rule-based emotion tagging.
+
+    This is a placeholder heuristic: counts sentiment keywords on the
+    other participant's messages (role == 'other' or sender != 'me').
+    """
+    positive_keywords = {"好", "谢谢", "开心", "赞", "可以", "行", "yes", "ok", "great", "love"}
+    negative_keywords = {"不好", "生气", "烦", "不行", "no", "不", "差", "伤心", "哭"}
+
+    counts = Counter()
+    for msg in messages:
+        text = str(msg.get("text") or msg.get("content") or "").lower()
+        sender = msg.get("sender") or msg.get("from")
+        role = msg.get("role")
+        if role not in (None, "other") and sender in (None, "other"):
+            # assume 'role' overrides sender
+            pass
+        is_other = role == "other" or sender not in (None, "me", "self")
+        if not is_other:
+            continue
+        if any(k in text for k in positive_keywords):
+            counts["positive"] += 1
+        if any(k in text for k in negative_keywords):
+            counts["negative"] += 1
+    total = counts["positive"] + counts["negative"]
+    mood = "neutral"
+    if total:
+        if counts["positive"] > counts["negative"]:
+            mood = "positive"
+        elif counts["negative"] > counts["positive"]:
+            mood = "negative"
+    return {"mood": mood, "positive": counts["positive"], "negative": counts["negative"]}
+
+
+def extract_schedules(messages: Iterable[Message]) -> List[Dict[str, Any]]:
+    """Extract simple schedule/plan items using keyword heuristics."""
+    schedule_keywords = {"明天", "后天", "周", "星期", "下周", "安排", "会议", "开会", "deadline", "ddl", "计划", "目标"}
+    date_prefixes = ("20", "19")  # rough ISO-like dates
+
+    results: List[Dict[str, Any]] = []
+    for msg in messages:
+        text = str(msg.get("text") or msg.get("content") or "")
+        if any(k in text for k in schedule_keywords) or text.strip().startswith(date_prefixes):
+            results.append(
+                {
+                    "text": text,
+                    "timestamp": _extract_timestamp(msg),
+                    "sender": msg.get("sender") or msg.get("from"),
+                }
+            )
+    return results
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -69,6 +153,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=5,
         help="Number of messages to preview (default: 5).",
     )
+    parser.add_argument(
+        "--emotion",
+        action="store_true",
+        help="Run simple local emotion summary on other participant messages.",
+    )
+    parser.add_argument(
+        "--schedule",
+        action="store_true",
+        help="Extract simple schedule/plan mentions (heuristic).",
+    )
     return parser
 
 
@@ -83,6 +177,20 @@ def main() -> None:
     preview_count = max(args.preview, 0)
     for msg in messages[:preview_count]:
         print(json.dumps(msg, ensure_ascii=False))
+
+    if args.emotion:
+        summary = summarize_emotion(messages)
+        print("# Emotion summary")
+        print(json.dumps(summary, ensure_ascii=False, default=str))
+
+    if args.schedule:
+        schedules = extract_schedules(messages)
+        print("# Schedule/plan items")
+        for item in schedules:
+            item_out = dict(item)
+            if isinstance(item_out.get("timestamp"), datetime):
+                item_out["timestamp"] = item_out["timestamp"].isoformat()
+            print(json.dumps(item_out, ensure_ascii=False))
 
 
 if __name__ == "__main__":
