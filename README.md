@@ -7,6 +7,7 @@ some interesting idea to explore
 This repo now includes:
 - CLI: read a **locally exported** WeChat conversation JSON or Windows WeChat SQLite DB (read-only copy), **only after explicit user consent**. Supports simple local analysis for **emotion summary** and **schedule/plan extraction** (heuristic, no external API).
 - GUI: a minimal Tkinter desktop app to pick file/DB, run analysis, and preview results.
+- Assistant GUI: a consolidated Tkinter app (`assistant_gui.py`) offering WeChat reading, notes/diary, and todo reminders (local, consent-driven).
 
 ### Usage
 
@@ -21,6 +22,8 @@ python wechat_reader.py /path/to/chat.json --consent --preview 3 --emotion --sch
 python wechat_reader.py "C:\\path\\to\\Multi.db" --db --talker wxid_xxx --consent --preview 3 --emotion --schedule
 # Custom table/fields if schema differs
 python wechat_reader.py "C:\\path\\to\\db.db" --db --table MSG --ts-field CreateTime --sender-field StrTalker --text-field StrContent --consent
+# With decryption command (example placeholder; requires user-provided tool/keys)
+python wechat_reader.py "C:\\path\\to\\encrypted.db" --db --decrypt-cmd "sqlcipher {src} -cmd \"...\" && cp decrypted {dst}" --consent
 ```
 
 - `--consent` is required to proceed (to ensure explicit permission).
@@ -30,6 +33,7 @@ python wechat_reader.py "C:\\path\\to\\db.db" --db --table MSG --ts-field Create
 - `--db` treats the path as a WeChat SQLite DB (read-only copy). Use `--talker` to filter by `StrTalker`, and `--limit` to cap rows.
 - `--table` / `--ts-field` / `--sender-field` / `--text-field` allow overriding DB schema names.
 - `--list-talkers` (GUI button) reads distinct talkers to help selection; for CLI, provide `--talker` directly.
+- `--decrypt-cmd` allows calling an external command to produce a decrypted temp DB; placeholders {src} / {dst} are required.
 
 ### Notes
 
@@ -54,3 +58,7 @@ Features:
 ### Encryption notice
 - If the DB is encrypted (e.g., sqlcipher/custom), you must supply a decrypted export or key via external tooling; this app does not derive keys. Read errors will mention schema/encryption issues.
 - To integrate decryption,先用外部工具生成解密后的 SQLite 副本，再将 CLI/GUI 指向该解密文件。
+
+### Assistant GUI (notes, todos, WeChat)
+- Launch `python assistant_gui.py`.
+- Tabs: WeChat (same consented reading/analysis, plus optional decrypt command), Notes/Diary (add & list), Todos (add with due time; reminders pop up ~5 minutes before due).

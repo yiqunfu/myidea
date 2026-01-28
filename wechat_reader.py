@@ -12,6 +12,7 @@ import argparse
 import json
 import shutil
 import sqlite3
+import subprocess
 import tempfile
 from collections import Counter
 from datetime import datetime
@@ -65,6 +66,19 @@ def _copy_readonly_db(db_path: Path) -> Path:
     return Path(tmp.name)
 
 
+def decrypt_db_with_command(src: Path, dst: Path, command: str) -> None:
+    """Optionally run a user-provided command to decrypt DB into dst.
+
+    The command should include placeholders {src} and {dst}.
+    Example: "sqlcipher {src} -cmd \"ATTACH DATABASE '{dst}' AS plaintext KEY '';\" -cmd \"SELECT sqlcipher_export('plaintext');\" -cmd \"DETACH DATABASE plaintext;\""
+    """
+    rendered = command.format(src=str(src), dst=str(dst))
+    try:
+        subprocess.check_call(rendered, shell=True)
+    except subprocess.CalledProcessError as exc:
+        raise ValueError("DB decryption command failed.") from exc
+
+
 def read_conversation_sqlite(
     db_path: str,
     consent: bool,
@@ -74,6 +88,7 @@ def read_conversation_sqlite(
     ts_field: str = "CreateTime",
     sender_field: str = "StrTalker",
     text_field: str = "StrContent",
+    decrypt_cmd: Optional[str] = None,
 ) -> List[Message]:
     """Read a conversation from a WeChat SQLite DB (Windows) in read-only mode.
 
@@ -85,6 +100,11 @@ def read_conversation_sqlite(
 
     path = Path(db_path).expanduser().resolve()
     copied = _copy_readonly_db(path)
+    if decrypt_cmd:
+        decrypted = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+        decrypted.close()
+        decrypt_db_with_command(copied, Path(decrypted.name), decrypt_cmd)
+        copied = Path(decrypted.name)
     try:
         conn = sqlite3.connect(f"file:{copied}?mode=ro", uri=True)
         cur = conn.cursor()
@@ -330,6 +350,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sender-field", default="StrTalker", help="DB sender field.")
     parser.add_argument("--text-field", default="StrContent", help="DB content field.")
     parser.add_argument(
+        "--decrypt-cmd",
+        help="Optional shell command to decrypt DB into temp file; use {src} and {dst} placeholders.",
+    )
+    parser.add_argument(
         "--emotion",
         action="store_true",
         help="Run simple local emotion summary on other participant messages.",
@@ -359,6 +383,7 @@ def main() -> None:
             ts_field=args.ts_field,
             sender_field=args.sender_field,
             text_field=args.text_field,
+            decrypt_cmd=args.decrypt_cmd,
         )
     else:
         messages = read_conversation_json(args.chat_path, consent=True)
