@@ -180,7 +180,7 @@ def _extract_timestamp(msg: Message) -> Optional[datetime]:
 
 
 def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
-    """Rule-based emotion tagging with weighted keywords + simple modifiers."""
+    """Rule-based emotion tagging with weighted keywords + simple modifiers + pattern boosts."""
     positive_keywords = {
         "好": 2,
         "谢谢": 1,
@@ -218,6 +218,8 @@ def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
     }
     intensifiers = {"很": 1.5, "非常": 2.0, "特别": 1.8, "超级": 2.0}
     negations = {"不", "没", "别", "无"}
+    positive_patterns = ("谢谢你", "辛苦了", "太好了", "不错啊", "好棒")
+    negative_patterns = ("怎么回事", "太糟了", "受不了", "失望", "麻烦")
 
     counts = Counter()
     score = 0
@@ -251,6 +253,14 @@ def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
             apply_weight(k, w, 1)
         for k, w in negative_keywords.items():
             apply_weight(k, w, -1)
+        for pat in positive_patterns:
+            if pat in text:
+                score += 2.0
+                counts["positive"] += 1
+        for pat in negative_patterns:
+            if pat in text:
+                score -= 2.0
+                counts["negative"] += 1
     total = counts["positive"] + counts["negative"]
     mood = "neutral"
     if total:

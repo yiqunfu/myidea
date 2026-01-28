@@ -28,7 +28,7 @@ python wechat_reader.py "C:\\path\\to\\encrypted.db" --db --decrypt-cmd "sqlciph
 
 - `--consent` is required to proceed (to ensure explicit permission).
 - `--preview` controls how many messages to print (default 5).
-- `--emotion` prints a local, keyword-based sentiment summary of the other participant（加权计分，含简单否定/强化词处理，输出包含 score/positive/negative/mood）。
+- `--emotion` prints a local, keyword/phrase-based sentiment summary（加权计分，含简单否定/强化词、模式匹配；输出包含 score/positive/negative/mood）。
 - `--schedule` extracts lines that look like plans/meetings/deadlines with timestamps.
 - `--db` treats the path as a WeChat SQLite DB (read-only copy). Use `--talker` to filter by `StrTalker`, and `--limit` to cap rows.
 - `--table` / `--ts-field` / `--sender-field` / `--text-field` allow overriding DB schema names.
