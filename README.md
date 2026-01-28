@@ -29,6 +29,7 @@ python wechat_reader.py "C:\\path\\to\\db.db" --db --table MSG --ts-field Create
 - `--schedule` extracts lines that look like plans/meetings/deadlines with timestamps.
 - `--db` treats the path as a WeChat SQLite DB (read-only copy). Use `--talker` to filter by `StrTalker`, and `--limit` to cap rows.
 - `--table` / `--ts-field` / `--sender-field` / `--text-field` allow overriding DB schema names.
+- `--list-talkers` (GUI button) reads distinct talkers to help selection; for CLI, provide `--talker` directly.
 
 ### Notes
 
@@ -47,5 +48,8 @@ python wechat_gui.py
 
 Features:
 - Select JSON or DB file.
-- Toggle DB mode, set talker filter, preview count (status line shows progress).
+- Toggle DB mode, list/select talker (DB), set preview count (status line shows progress).
 - Runs consented read + emotion + schedule analysis locally, showing output in the window.
+
+### Encryption notice
+- If the DB is encrypted (e.g., sqlcipher/custom), you must supply a decrypted export or key via external tooling; this app does not derive keys. Read errors will mention schema/encryption issues.*** End Patch

@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, scrolledtext
 
 from wechat_reader import (
     extract_schedules,
+    list_talkers_sqlite,
     read_conversation_json,
     read_conversation_sqlite,
     summarize_emotion,
@@ -25,6 +26,7 @@ class App(tk.Tk):
         self.is_db_var = tk.BooleanVar()
         self.talker_var = tk.StringVar()
         self.preview_var = tk.IntVar(value=5)
+        self.talkers: list[str] = []
         self.output = scrolledtext.ScrolledText(self, wrap=tk.WORD)
         self.status_var = tk.StringVar(value="Awaiting consent and input.")
 
@@ -44,7 +46,12 @@ class App(tk.Tk):
             side=tk.LEFT, padx=5
         )
         tk.Label(opts, text="Talker (DB):").pack(side=tk.LEFT)
-        tk.Entry(opts, textvariable=self.talker_var, width=20).pack(side=tk.LEFT, padx=5)
+        self.talker_entry = tk.Entry(opts, textvariable=self.talker_var, width=20)
+        self.talker_entry.pack(side=tk.LEFT, padx=2)
+        tk.Button(opts, text="List", command=self._list_talkers).pack(side=tk.LEFT, padx=2)
+        self.talker_box = tk.Listbox(opts, height=4, exportselection=False)
+        self.talker_box.pack(side=tk.LEFT, padx=2)
+        self.talker_box.bind("<<ListboxSelect>>", self._on_select_talker)
         tk.Label(opts, text="Preview:").pack(side=tk.LEFT)
         tk.Entry(opts, textvariable=self.preview_var, width=5).pack(side=tk.LEFT, padx=5)
 
@@ -99,6 +106,28 @@ class App(tk.Tk):
                 out["timestamp"] = ts.isoformat()
             self.output.insert(tk.END, json.dumps(out, ensure_ascii=False) + "\n")
         self.status_var.set("Done.")
+
+    def _list_talkers(self) -> None:
+        path = self.path_var.get().strip()
+        if not path:
+            messagebox.showerror("Error", "Please select a DB path first.")
+            return
+        self.status_var.set("Listing talkers...")
+        try:
+            self.talkers = list_talkers_sqlite(path, consent=True)
+        except Exception as exc:
+            self.status_var.set("Failed.")
+            messagebox.showerror("List error", str(exc))
+            return
+        self.talker_box.delete(0, tk.END)
+        for t in self.talkers:
+            self.talker_box.insert(tk.END, t)
+        self.status_var.set("Talkers loaded.")
+
+    def _on_select_talker(self, event: tk.Event) -> None:
+        sel = self.talker_box.curselection()
+        if sel:
+            self.talker_var.set(self.talker_box.get(sel[0]))
 
 
 def main() -> None:

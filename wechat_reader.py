@@ -160,15 +160,34 @@ def _extract_timestamp(msg: Message) -> Optional[datetime]:
 
 
 def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
-    """Very simple rule-based emotion tagging.
-
-    This is a placeholder heuristic: counts sentiment keywords on the
-    other participant's messages (role == 'other' or sender != 'me').
-    """
-    positive_keywords = {"好", "谢谢", "开心", "赞", "可以", "行", "yes", "ok", "great", "love"}
-    negative_keywords = {"不好", "生气", "烦", "不行", "no", "不", "差", "伤心", "哭"}
+    """Rule-based emotion tagging with weighted keywords."""
+    positive_keywords = {
+        "好": 2,
+        "谢谢": 1,
+        "开心": 3,
+        "赞": 2,
+        "可以": 1,
+        "行": 1,
+        "yes": 1,
+        "ok": 1,
+        "great": 3,
+        "love": 3,
+    }
+    negative_keywords = {
+        "不好": 2,
+        "生气": 3,
+        "烦": 2,
+        "不行": 2,
+        "no": 1,
+        "不": 1,
+        "差": 1,
+        "伤心": 3,
+        "哭": 2,
+        "讨厌": 3,
+    }
 
     counts = Counter()
+    score = 0
     for msg in messages:
         text = str(msg.get("text") or msg.get("content") or "").lower()
         sender = msg.get("sender") or msg.get("from")
@@ -179,18 +198,54 @@ def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
         is_other = role == "other" or sender not in (None, "me", "self")
         if not is_other:
             continue
-        if any(k in text for k in positive_keywords):
-            counts["positive"] += 1
-        if any(k in text for k in negative_keywords):
-            counts["negative"] += 1
+        for k, w in positive_keywords.items():
+            if k in text:
+                counts["positive"] += 1
+                score += w
+        for k, w in negative_keywords.items():
+            if k in text:
+                counts["negative"] += 1
+                score -= w
     total = counts["positive"] + counts["negative"]
     mood = "neutral"
     if total:
-        if counts["positive"] > counts["negative"]:
+        if score > 0:
             mood = "positive"
-        elif counts["negative"] > counts["positive"]:
+        elif score < 0:
             mood = "negative"
-    return {"mood": mood, "positive": counts["positive"], "negative": counts["negative"]}
+    return {
+        "mood": mood,
+        "positive": counts["positive"],
+        "negative": counts["negative"],
+        "score": score,
+    }
+
+
+def list_talkers_sqlite(
+    db_path: str,
+    consent: bool,
+    table: str = "MSG",
+    sender_field: str = "StrTalker",
+) -> List[str]:
+    """List distinct talkers from a WeChat SQLite DB (read-only copy)."""
+    if not consent:
+        raise PermissionError("User consent is required before reading chats.")
+    path = Path(db_path).expanduser().resolve()
+    copied = _copy_readonly_db(path)
+    try:
+        conn = sqlite3.connect(f"file:{copied}?mode=ro", uri=True)
+        cur = conn.cursor()
+        sql = f"SELECT DISTINCT {sender_field} FROM {table} LIMIT 200;"
+        try:
+            rows = cur.execute(sql).fetchall()
+        except sqlite3.DatabaseError as exc:
+            raise ValueError("Failed to read DB (schema mismatch or encrypted).") from exc
+    finally:
+        try:
+            copied.unlink()
+        except OSError:
+            pass
+    return [r[0] for r in rows if r and r[0]]
 
 
 def extract_schedules(messages: Iterable[Message]) -> List[Dict[str, Any]]:
