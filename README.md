@@ -67,3 +67,30 @@ Features:
 - Requires Python and `pyinstaller` on Windows.
 - Run `build_exe.bat` in the repo root; the packaged app will be at `dist/ai_assistant.exe`.
 - EXE remains local/offline and still requires user consent for chat access.
+
+---
+
+## 中文说明
+
+### 功能概览
+- 微信本地聊天读取（JSON 或 Windows SQLite，需用户同意；可选解密命令）。
+- 聊天情绪分析与日程/计划抽取（本地规则、加权情绪计分）。
+- 桌面 GUI（WeChat、Notes/Diary、Todos），支持待办提醒（提前约 5 分钟弹窗）。
+- 可通过 `assistant_gui.py` 启动，也可使用打包的 Windows EXE（需自备 Python/pyinstaller 构建）。
+
+### 使用示例
+```bash
+# JSON
+python wechat_reader.py /path/to/chat.json --consent --emotion --schedule
+
+# Windows DB + 解密命令（需替换为实际工具/密钥）
+python wechat_reader.py "C:\\path\\to\\enc.db" --db --decrypt-cmd "sqlcipher {src} -cmd \"...\" && cp decrypted.db {dst}" --talker wxid_xxx --consent --emotion --schedule
+```
+
+### GUI
+- `python assistant_gui.py` 启动 AI 助手（含微信、笔记/日记、待办）。
+- 待办支持设置截止时间，提前约 5 分钟提醒。
+
+### 打包 EXE（Windows）
+- 在仓库根目录执行 `build_exe.bat`，生成 `dist/ai_assistant.exe`。
+- 打包后仍为本地离线应用，读取聊天仍需用户明确同意。
