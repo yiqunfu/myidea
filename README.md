@@ -62,3 +62,8 @@ Features:
 ### Assistant GUI (notes, todos, WeChat)
 - Launch `python assistant_gui.py`.
 - Tabs: WeChat (same consented reading/analysis, plus optional decrypt command), Notes/Diary (add & list), Todos (add with due time; reminders pop up ~5 minutes before due).
+
+### Windows EXE build (optional)
+- Requires Python and `pyinstaller` on Windows.
+- Run `build_exe.bat` in the repo root; the packaged app will be at `dist/ai_assistant.exe`.
+- EXE remains local/offline and still requires user consent for chat access.
