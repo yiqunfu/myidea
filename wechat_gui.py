@@ -27,6 +27,8 @@ class App(tk.Tk):
         self.talker_var = tk.StringVar()
         self.preview_var = tk.IntVar(value=5)
         self.talkers: list[str] = []
+        self.show_emotion_var = tk.BooleanVar(value=True)
+        self.show_schedule_var = tk.BooleanVar(value=True)
         self.output = scrolledtext.ScrolledText(self, wrap=tk.WORD)
         self.status_var = tk.StringVar(value="Awaiting consent and input.")
 
@@ -54,6 +56,12 @@ class App(tk.Tk):
         self.talker_box.bind("<<ListboxSelect>>", self._on_select_talker)
         tk.Label(opts, text="Preview:").pack(side=tk.LEFT)
         tk.Entry(opts, textvariable=self.preview_var, width=5).pack(side=tk.LEFT, padx=5)
+        tk.Checkbutton(opts, text="Emotion", variable=self.show_emotion_var).pack(
+            side=tk.LEFT, padx=5
+        )
+        tk.Checkbutton(opts, text="Schedule", variable=self.show_schedule_var).pack(
+            side=tk.LEFT, padx=5
+        )
 
         btns = tk.Frame(self)
         btns.pack(fill=tk.X, padx=10, pady=5)
@@ -89,22 +97,24 @@ class App(tk.Tk):
             return
 
         preview_n = max(self.preview_var.get(), 0)
-        emotion = summarize_emotion(msgs)
-        schedules = extract_schedules(msgs)
+        emotion = summarize_emotion(msgs) if self.show_emotion_var.get() else None
+        schedules = extract_schedules(msgs) if self.show_schedule_var.get() else []
 
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, f"# Preview (first {preview_n})\n")
         for msg in msgs[:preview_n]:
             self.output.insert(tk.END, json.dumps(msg, ensure_ascii=False) + "\n")
-        self.output.insert(tk.END, "\n# Emotion summary\n")
-        self.output.insert(tk.END, json.dumps(emotion, ensure_ascii=False) + "\n")
-        self.output.insert(tk.END, "\n# Schedule/plan items\n")
-        for item in schedules:
-            out = dict(item)
-            ts = out.get("timestamp")
-            if hasattr(ts, "isoformat"):
-                out["timestamp"] = ts.isoformat()
-            self.output.insert(tk.END, json.dumps(out, ensure_ascii=False) + "\n")
+        if emotion is not None:
+            self.output.insert(tk.END, "\n# Emotion summary\n")
+            self.output.insert(tk.END, json.dumps(emotion, ensure_ascii=False) + "\n")
+        if schedules:
+            self.output.insert(tk.END, "\n# Schedule/plan items\n")
+            for item in schedules:
+                out = dict(item)
+                ts = out.get("timestamp")
+                if hasattr(ts, "isoformat"):
+                    out["timestamp"] = ts.isoformat()
+                self.output.insert(tk.END, json.dumps(out, ensure_ascii=False) + "\n")
         self.status_var.set("Done.")
 
     def _list_talkers(self) -> None:

@@ -25,7 +25,7 @@ python wechat_reader.py "C:\\path\\to\\db.db" --db --table MSG --ts-field Create
 
 - `--consent` is required to proceed (to ensure explicit permission).
 - `--preview` controls how many messages to print (default 5).
-- `--emotion` prints a local, keyword-based sentiment summary of the other participant.
+- `--emotion` prints a local, keyword-based sentiment summary of the other participant（加权计分，含简单否定/强化词处理，输出包含 score/positive/negative/mood）。
 - `--schedule` extracts lines that look like plans/meetings/deadlines with timestamps.
 - `--db` treats the path as a WeChat SQLite DB (read-only copy). Use `--talker` to filter by `StrTalker`, and `--limit` to cap rows.
 - `--table` / `--ts-field` / `--sender-field` / `--text-field` allow overriding DB schema names.
@@ -49,7 +49,8 @@ python wechat_gui.py
 Features:
 - Select JSON or DB file.
 - Toggle DB mode, list/select talker (DB), set preview count (status line shows progress).
-- Runs consented read + emotion + schedule analysis locally, showing output in the window.
+- Toggle emotion/schedule analysis; shows weighted emotion summary and plan extraction locally.
 
 ### Encryption notice
-- If the DB is encrypted (e.g., sqlcipher/custom), you must supply a decrypted export or key via external tooling; this app does not derive keys. Read errors will mention schema/encryption issues.*** End Patch
+- If the DB is encrypted (e.g., sqlcipher/custom), you must supply a decrypted export or key via external tooling; this app does not derive keys. Read errors will mention schema/encryption issues.
+- To integrate decryption,先用外部工具生成解密后的 SQLite 副本，再将 CLI/GUI 指向该解密文件。

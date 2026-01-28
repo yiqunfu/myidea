@@ -160,7 +160,7 @@ def _extract_timestamp(msg: Message) -> Optional[datetime]:
 
 
 def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
-    """Rule-based emotion tagging with weighted keywords."""
+    """Rule-based emotion tagging with weighted keywords + simple modifiers."""
     positive_keywords = {
         "好": 2,
         "谢谢": 1,
@@ -172,6 +172,12 @@ def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
         "ok": 1,
         "great": 3,
         "love": 3,
+        "喜欢": 3,
+        "满意": 2,
+        "不错": 2,
+        "期待": 2,
+        "放心": 2,
+        "顺利": 2,
     }
     negative_keywords = {
         "不好": 2,
@@ -184,7 +190,14 @@ def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
         "伤心": 3,
         "哭": 2,
         "讨厌": 3,
+        "担心": 2,
+        "焦虑": 3,
+        "郁闷": 3,
+        "失望": 3,
+        "难受": 2,
     }
+    intensifiers = {"很": 1.5, "非常": 2.0, "特别": 1.8, "超级": 2.0}
+    negations = {"不", "没", "别", "无"}
 
     counts = Counter()
     score = 0
@@ -198,14 +211,26 @@ def summarize_emotion(messages: Iterable[Message]) -> Dict[str, Any]:
         is_other = role == "other" or sender not in (None, "me", "self")
         if not is_other:
             continue
+        def apply_weight(k: str, base: int, sign: int) -> None:
+            nonlocal score
+            idx = text.find(k)
+            if idx >= 0:
+                factor = 1.0
+                # crude intensifier/negation detection within window
+                window = text[max(0, idx - 4) : idx]
+                for n in negations:
+                    if n in window:
+                        factor *= -1
+                for m, mult in intensifiers.items():
+                    if m in window:
+                        factor *= mult
+                score += sign * base * factor
+                counts["positive" if sign > 0 else "negative"] += 1
+
         for k, w in positive_keywords.items():
-            if k in text:
-                counts["positive"] += 1
-                score += w
+            apply_weight(k, w, 1)
         for k, w in negative_keywords.items():
-            if k in text:
-                counts["negative"] += 1
-                score -= w
+            apply_weight(k, w, -1)
     total = counts["positive"] + counts["negative"]
     mood = "neutral"
     if total:
