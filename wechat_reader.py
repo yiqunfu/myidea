@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import sqlite3
+import tempfile
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -34,8 +37,8 @@ def _load_chat_file(chat_path: Path) -> List[Message]:
         raise ValueError(f"Chat file is not valid JSON: {chat_path}") from exc
 
 
-def read_conversation(chat_path: str, consent: bool) -> List[Message]:
-    """Read a locally exported WeChat conversation after consent is granted.
+def read_conversation_json(chat_path: str, consent: bool) -> List[Message]:
+    """Read a locally exported WeChat JSON conversation after consent is granted.
 
     Args:
         chat_path: Path to the exported conversation JSON file.
@@ -53,6 +56,72 @@ def read_conversation(chat_path: str, consent: bool) -> List[Message]:
 
     path = Path(chat_path).expanduser().resolve()
     return _load_chat_file(path)
+
+
+def _copy_readonly_db(db_path: Path) -> Path:
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+    tmp.close()
+    shutil.copyfile(db_path, tmp.name)
+    return Path(tmp.name)
+
+
+def read_conversation_sqlite(db_path: str, consent: bool, talker: Optional[str] = None, limit: Optional[int] = None) -> List[Message]:
+    """Read a conversation from a WeChat SQLite DB (Windows) in read-only mode.
+
+    Expects a table `MSG` with columns CreateTime (int seconds), StrTalker, StrContent.
+    If schema differs or DB is encrypted, raises ValueError.
+    """
+    if not consent:
+        raise PermissionError("User consent is required before reading chats.")
+
+    path = Path(db_path).expanduser().resolve()
+    copied = _copy_readonly_db(path)
+    try:
+        conn = sqlite3.connect(f"file:{copied}?mode=ro", uri=True)
+        cur = conn.cursor()
+        where_clause = ""
+        params: List[Any] = []
+        if talker:
+            where_clause = "WHERE StrTalker = ?"
+            params.append(talker)
+        order_clause = "ORDER BY CreateTime"
+        limit_clause = ""
+        if limit:
+            limit_clause = "LIMIT ?"
+            params.append(limit)
+        sql = f"SELECT CreateTime, StrTalker, StrContent FROM MSG {where_clause} {order_clause} {limit_clause};"
+        try:
+            rows = cur.execute(sql, params).fetchall()
+        except sqlite3.DatabaseError as exc:
+            raise ValueError("Failed to read DB (schema mismatch or encrypted).") from exc
+    finally:
+        try:
+            copied.unlink()
+        except OSError:
+            pass
+
+    messages: List[Message] = []
+    for ts_raw, talker_raw, content in rows:
+        messages.append(
+            {
+                "timestamp": _normalize_timestamp(ts_raw),
+                "sender": talker_raw,
+                "text": content,
+            }
+        )
+    return messages
+
+
+def _normalize_timestamp(ts: Any) -> Any:
+    if isinstance(ts, (int, float)):
+        try:
+            # Heuristic: if seconds value seems in ms, divide
+            if ts > 32503680000:
+                ts = ts / 1000.0
+            return datetime.fromtimestamp(ts)
+        except Exception:
+            return ts
+    return ts
 
 
 def _extract_timestamp(msg: Message) -> Optional[datetime]:
@@ -140,7 +209,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "chat_path",
-        help="Path to exported conversation JSON file (local only).",
+        help="Path to exported conversation JSON file or WeChat SQLite DB.",
     )
     parser.add_argument(
         "--consent",
@@ -152,6 +221,20 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="Number of messages to preview (default: 5).",
+    )
+    parser.add_argument(
+        "--db",
+        action="store_true",
+        help="Treat chat_path as a WeChat SQLite DB (Windows) instead of JSON.",
+    )
+    parser.add_argument(
+        "--talker",
+        help="For DB mode: talker/wxid to filter messages (StrTalker).",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="For DB mode: limit number of messages read.",
     )
     parser.add_argument(
         "--emotion",
@@ -173,7 +256,12 @@ def main() -> None:
     if not args.consent:
         parser.error("Refusing to read chat without --consent.")
 
-    messages = read_conversation(args.chat_path, consent=True)
+    if args.db:
+        messages = read_conversation_sqlite(
+            args.chat_path, consent=True, talker=args.talker, limit=args.limit
+        )
+    else:
+        messages = read_conversation_json(args.chat_path, consent=True)
     preview_count = max(args.preview, 0)
     for msg in messages[:preview_count]:
         print(json.dumps(msg, ensure_ascii=False))
