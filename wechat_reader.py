@@ -65,7 +65,16 @@ def _copy_readonly_db(db_path: Path) -> Path:
     return Path(tmp.name)
 
 
-def read_conversation_sqlite(db_path: str, consent: bool, talker: Optional[str] = None, limit: Optional[int] = None) -> List[Message]:
+def read_conversation_sqlite(
+    db_path: str,
+    consent: bool,
+    talker: Optional[str] = None,
+    limit: Optional[int] = None,
+    table: str = "MSG",
+    ts_field: str = "CreateTime",
+    sender_field: str = "StrTalker",
+    text_field: str = "StrContent",
+) -> List[Message]:
     """Read a conversation from a WeChat SQLite DB (Windows) in read-only mode.
 
     Expects a table `MSG` with columns CreateTime (int seconds), StrTalker, StrContent.
@@ -82,14 +91,14 @@ def read_conversation_sqlite(db_path: str, consent: bool, talker: Optional[str] 
         where_clause = ""
         params: List[Any] = []
         if talker:
-            where_clause = "WHERE StrTalker = ?"
+            where_clause = f"WHERE {sender_field} = ?"
             params.append(talker)
-        order_clause = "ORDER BY CreateTime"
+        order_clause = f"ORDER BY {ts_field}"
         limit_clause = ""
         if limit:
             limit_clause = "LIMIT ?"
             params.append(limit)
-        sql = f"SELECT CreateTime, StrTalker, StrContent FROM MSG {where_clause} {order_clause} {limit_clause};"
+        sql = f"SELECT {ts_field}, {sender_field}, {text_field} FROM {table} {where_clause} {order_clause} {limit_clause};"
         try:
             rows = cur.execute(sql, params).fetchall()
         except sqlite3.DatabaseError as exc:
@@ -236,6 +245,10 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         help="For DB mode: limit number of messages read.",
     )
+    parser.add_argument("--table", default="MSG", help="DB table name (default: MSG).")
+    parser.add_argument("--ts-field", default="CreateTime", help="DB timestamp field.")
+    parser.add_argument("--sender-field", default="StrTalker", help="DB sender field.")
+    parser.add_argument("--text-field", default="StrContent", help="DB content field.")
     parser.add_argument(
         "--emotion",
         action="store_true",
@@ -258,7 +271,14 @@ def main() -> None:
 
     if args.db:
         messages = read_conversation_sqlite(
-            args.chat_path, consent=True, talker=args.talker, limit=args.limit
+            args.chat_path,
+            consent=True,
+            talker=args.talker,
+            limit=args.limit,
+            table=args.table,
+            ts_field=args.ts_field,
+            sender_field=args.sender_field,
+            text_field=args.text_field,
         )
     else:
         messages = read_conversation_json(args.chat_path, consent=True)

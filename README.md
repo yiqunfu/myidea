@@ -19,6 +19,8 @@ python wechat_reader.py /path/to/chat.json --consent --preview 3 --emotion --sch
 
 # Windows DB (read-only copy)
 python wechat_reader.py "C:\\path\\to\\Multi.db" --db --talker wxid_xxx --consent --preview 3 --emotion --schedule
+# Custom table/fields if schema differs
+python wechat_reader.py "C:\\path\\to\\db.db" --db --table MSG --ts-field CreateTime --sender-field StrTalker --text-field StrContent --consent
 ```
 
 - `--consent` is required to proceed (to ensure explicit permission).
@@ -26,6 +28,7 @@ python wechat_reader.py "C:\\path\\to\\Multi.db" --db --talker wxid_xxx --consen
 - `--emotion` prints a local, keyword-based sentiment summary of the other participant.
 - `--schedule` extracts lines that look like plans/meetings/deadlines with timestamps.
 - `--db` treats the path as a WeChat SQLite DB (read-only copy). Use `--talker` to filter by `StrTalker`, and `--limit` to cap rows.
+- `--table` / `--ts-field` / `--sender-field` / `--text-field` allow overriding DB schema names.
 
 ### Notes
 
@@ -44,5 +47,5 @@ python wechat_gui.py
 
 Features:
 - Select JSON or DB file.
-- Toggle DB mode, set talker filter, preview count.
+- Toggle DB mode, set talker filter, preview count (status line shows progress).
 - Runs consented read + emotion + schedule analysis locally, showing output in the window.

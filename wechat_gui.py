@@ -26,6 +26,7 @@ class App(tk.Tk):
         self.talker_var = tk.StringVar()
         self.preview_var = tk.IntVar(value=5)
         self.output = scrolledtext.ScrolledText(self, wrap=tk.WORD)
+        self.status_var = tk.StringVar(value="Awaiting consent and input.")
 
         self._build_ui()
 
@@ -52,6 +53,7 @@ class App(tk.Tk):
         tk.Button(btns, text="Load & Analyze (consent)", command=self._run).pack(
             side=tk.LEFT, padx=5
         )
+        tk.Label(btns, textvariable=self.status_var, fg="gray").pack(side=tk.LEFT, padx=10)
 
         self.output.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
@@ -66,6 +68,7 @@ class App(tk.Tk):
             messagebox.showerror("Error", "Please select a file path.")
             return
 
+        self.status_var.set("Reading...")
         try:
             if self.is_db_var.get():
                 msgs = read_conversation_sqlite(
@@ -74,6 +77,7 @@ class App(tk.Tk):
             else:
                 msgs = read_conversation_json(path, consent=True)
         except Exception as exc:
+            self.status_var.set("Failed.")
             messagebox.showerror("Read error", str(exc))
             return
 
@@ -94,6 +98,7 @@ class App(tk.Tk):
             if hasattr(ts, "isoformat"):
                 out["timestamp"] = ts.isoformat()
             self.output.insert(tk.END, json.dumps(out, ensure_ascii=False) + "\n")
+        self.status_var.set("Done.")
 
 
 def main() -> None:
